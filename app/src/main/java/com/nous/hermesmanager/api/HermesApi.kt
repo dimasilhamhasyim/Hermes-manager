@@ -87,14 +87,14 @@ class HermesApi() {
     // API server (8642) — OpenAI-compatible endpoints
     // =========================================================
 
-    suspend fun health(): JsonObject = get("$apiBase()/health")
+    suspend fun health(): JsonObject = get("${apiBase()}/health")
 
-    suspend fun capabilities(): JsonObject = get("$apiBase()/v1/capabilities")
+    suspend fun capabilities(): JsonObject = get("${apiBase()}/v1/capabilities")
 
-    suspend fun detailedHealth(): JsonObject = get("$apiBase()/health/detailed")
+    suspend fun detailedHealth(): JsonObject = get("${apiBase()}/health/detailed")
 
     suspend fun listModels(): List<ModelRow> {
-        val data = get("$apiBase()/v1/models")["data"]?.jsonArray ?: JsonArray(emptyList())
+        val data = get("${apiBase()}/v1/models")["data"]?.jsonArray ?: JsonArray(emptyList())
         return data.map {
             ModelRow(id = it.jsonObject["id"]?.jsonPrimitive?.contentOrNull ?: "")
         }
@@ -102,7 +102,7 @@ class HermesApi() {
 
     /** Rich provider/model inventory (same data the dashboard Models page uses). */
     suspend fun modelOptions(refresh: Boolean = false): JsonObject =
-        get("$apiBase()/api/model/options" + if (refresh) "?refresh=1" else "")
+        get("${apiBase()}/api/model/options" + if (refresh) "?refresh=1" else "")
 
     private fun buildChatPayload(messages: List<ChatMessage>, stream: Boolean): JsonObject =
         JsonObject(buildMap {
@@ -123,7 +123,7 @@ class HermesApi() {
     /** Non-streaming chat completion. Returns (text, reasoning, usage). */
     suspend fun chat(messages: List<ChatMessage>): ChatResult {
         val payload = buildChatPayload(messages, stream = false).toString()
-        val obj = post("$apiBase()/v1/chat/completions", payload)
+        val obj = post("${apiBase()}/v1/chat/completions", payload)
         val choice = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject
         val msg = choice?.get("message")?.jsonObject
         val usage = obj["usage"]?.jsonObject
@@ -149,7 +149,7 @@ class HermesApi() {
             sessionId?.let { put("session_id", JsonPrimitive(it)) }
             instructions?.let { put("instructions", JsonPrimitive(it)) }
         })
-        val obj = post("$apiBase()/v1/runs", body.toString())
+        val obj = post("${apiBase()}/v1/runs", body.toString())
         return RunHandle(
             runId = obj["run_id"]?.jsonPrimitive?.contentOrNull ?: error("no run_id"),
             status = obj["status"]?.jsonPrimitive?.contentOrNull ?: "started",
@@ -157,7 +157,7 @@ class HermesApi() {
     }
 
     suspend fun runStatus(runId: String): RunStatus {
-        val obj = get("$apiBase()/v1/runs/$runId")
+        val obj = get("${apiBase()}/v1/runs/$runId")
         val usage = obj["usage"]?.jsonObject
         return RunStatus(
             runId = runId,
@@ -182,12 +182,12 @@ class HermesApi() {
         onError: (Throwable) -> Unit,
         onOpen: () -> Unit = {},
     ): EventSource {
-        val req = Request.Builder().url("$apiBase()/v1/runs/$runId/events").auth().build()
+        val req = Request.Builder().url("${apiBase()}/v1/runs/$runId/events").auth().build()
         return EventSources.createFactory(http).newEventSource(req, object : EventSourceListener() {
             override fun onOpen(es: EventSource, resp: Response) = onOpen()
 
-            override fun onEvent(es: EventSource, id: String?, type: String?, data: String?) {
-                if (data == null) return
+            // OkHttp 4.12+ uses onEvent with 'event' parameter name
+            override fun onEvent(es: EventSource, id: String?, type: String?, data: String) {
                 val element = runCatching { json.parseToJsonElement(data) }.getOrNull()
                 onEvent(
                     RunEvent(
@@ -208,7 +208,7 @@ class HermesApi() {
     }
 
     suspend fun stopRun(runId: String): JsonObject = execJson(
-        Request.Builder().url("$apiBase()/v1/runs/$runId/stop")
+        Request.Builder().url("${apiBase()}/v1/runs/$runId/stop")
             .auth().post("{}".toRequestBody("application/json".toMediaType())).build()
     )
 
@@ -222,7 +222,7 @@ class HermesApi() {
                 if (provider.isNotEmpty()) put("provider", JsonPrimitive(provider))
             }
         )
-        val obj = post("$apiBase()/api/sessions/$sessionId/chat", body.toString())
+        val obj = post("${apiBase()}/api/sessions/$sessionId/chat", body.toString())
         val msg = obj["choices"]?.jsonArray?.firstOrNull()?.jsonObject
             ?.get("message")?.jsonObject
         return ChatResult(
@@ -241,7 +241,7 @@ class HermesApi() {
     // credentials / behind the same auth). If a 401 comes back the UI falls
     // back to the embedded dashboard WebView for those features.
 
-    suspend fun dashboardStatus(): JsonObject = get("$dashBase()/api/status")
+    suspend fun dashboardStatus(): JsonObject = get("${dashBase()}/api/status")
 
     /**
      * Generic Gateway RPC used by the dashboard frontend.
@@ -259,7 +259,7 @@ class HermesApi() {
             "method" to JsonPrimitive(method),
             "params" to params,
         ))
-        val obj = post("$dashBase()/api/rpc", body.toString())
+        val obj = post("${dashBase()}/api/rpc", body.toString())
         obj["error"]?.let { err ->
             throw HermesException(-1, err.toString())
         }
